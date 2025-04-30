@@ -41,12 +41,12 @@
     },
     "events": [
       {
-        "affects": ["包菜"],
+        "affect": ["包菜"],
         "increase": true,
         "description": "包菜成为护眼产品，居民积极采购。"
       },
       {
-        "affects": ["太虚山雪糕"],
+        "affect": ["太虚山雪糕"],
         "increase": true,
         "description": "太虚山雪糕正式上市，成为游客打卡必吃品，价格提升。"
       }
