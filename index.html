@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <title>商品价格监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta charset="utf-8">
+    <style>
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .chart-container { max-height: 500px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <h1> 商界双侠   云津市集 </h1>
+
+    <h2 id="cycleNames"></h2>
+
+    <!-- 价格趋势图 -->
+    <h2>商品价格趋势</h2>
+    <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+    </div>
+
+    <!-- 价格统计表格 -->
+    <h2>价格统计</h2>
+    <table id="statsTable">
+        <thead>
+        <tr>
+            <th>商品</th>
+            <th>价格</th>
+            <th>状态</th>
+            <th>整体平均</th>
+            <th>相对整体</th>
+            <th>自然平均</th>
+            <th>相对自然</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div>
+        <span>注： 整体平均部分包括了受到事件影响的部分的价格，而自然平均则刨除了受到事件影响的部分的价格。</span>
+    </div>
+
+    <!-- 事件和新闻 -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <h2>生效事件</h2>
+            <ul id="currentEvents"></ul>
+        </div>
+        <div>
+            <h2>最新新闻</h2>
+            <ul id="latestNews"></ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        // 加载数据
+        const response = await fetch('data.json');
+        const cycles = await response.json();
+
+        // 准备数据结构
+        const products = [...new Set(cycles.flatMap(c => Object.keys(c.prices)))];
+        const productData = {};
+
+        // 初始化商品数据结构
+        products.forEach(p => {
+            productData[p] = {
+                prices: [],
+                affected: new Array(cycles.length).fill(false)
+            };
+        });
+
+        // 处理事件影响
+        cycles.forEach((cycle, cycleIdx) => {
+            cycle.events.forEach(event => {
+                event.affect.forEach(product => {
+                    for (let i = cycleIdx; i <= Math.min(cycleIdx+2, cycles.length-1); i++) {
+                        productData[product].affected[i] = true;
+                    }
+                });
+            });
+        });
+
+        // 填充价格数据
+        cycles.forEach((cycle, cycleIdx) => {
+            products.forEach(product => {
+                productData[product].prices[cycleIdx] =
+                    cycle.prices[product] !== undefined ? cycle.prices[product] : null;
+            });
+        });
+
+        // 绘制折线图
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: cycles.map(c => c.name),
+                datasets: products.map((product, i) => ({
+                    label: product,
+                    data: productData[product].prices,
+                    borderColor: `hsl(${i * 360 / products.length}, 70%, 50%)`,
+                    tension: 0.2,
+                    spanGaps: true
+                }))
+            },
+            options: {
+                scales: {
+                    y: {
+                        type: 'logarithmic',
+                        title: {
+                            display: true,
+                            text: '价格（对数坐标）'
+                        },
+                        ticks: {
+                            callback: function(value, index, values) {
+                                return Number(value.toString()); // 优化刻度显示
+                            },
+                            color: '#666',
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                        }
+                    },
+                    x: {/* 原有x轴配置保持不变 */}
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed.y !== null) {
+                                    label += Number(context.parsed.y.toFixed(2));
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 显示周期名称
+        const cycleNamesContainer = document.getElementById('cycleNames');
+            cycleNamesContainer.innerHTML = `周期 ${cycles.length}：<strong>${cycles[cycles.length-1].name}</strong>`;
+
+        // 生成表格
+        const latestCycle = cycles[cycles.length-1];
+        const tbody = document.querySelector('#statsTable tbody');
+
+        products.forEach(product => {
+            const data = productData[product];
+            const latestPrice = latestCycle.prices[product];
+            const trend = getTrend(product, cycles);
+
+            // 计算平均值
+            const [allValues, naturalValues] = data.prices.reduce((acc, val, idx) => {
+                if (val !== null) {
+                    acc[0].push(val);
+                    if (!data.affected[idx]) acc[1].push(val);
+                }
+                return acc;
+            }, [[], []]);
+
+            const avgAll = allValues.length ? allValues.reduce((a,b) => a+b)/allValues.length : null;
+            const avgNatural = naturalValues.length ? naturalValues.reduce((a,b) => a+b)/naturalValues.length : null;
+
+            // 创建表格行
+            tbody.innerHTML += `
+            <tr>
+                <td>${product}</td>
+                <td>${latestPrice ?? '-'}</td>
+                <td>${trend}</td>
+                <td>${avgAll?.toFixed(2) ?? '-'}</td>
+                <td>${calcPercentage(latestPrice, avgAll)}</td>
+                <td>${avgNatural?.toFixed(2) ?? '-'}</td>
+                <td>${calcPercentage(latestPrice, avgNatural)}</td>
+            </tr>
+        `;
+        });
+
+        // 显示事件和新闻
+        const currentEvents = document.getElementById('currentEvents');
+        const latestNews = document.getElementById('latestNews');
+        const latestCycleIndex = cycles.length - 1;
+
+        // 收集生效事件
+        const activeEvents = [];
+        for (let m = Math.max(0, latestCycleIndex-2); m <= latestCycleIndex; m++) {
+            cycles[m].events.forEach((event, i) => {
+                if (m-1 >= 0) { // 关联的新闻周期
+                    const news = cycles[m-1].news[i];
+                    activeEvents.push({...event, news});
+                }
+            });
+        }
+
+        // 显示事件
+        activeEvents.forEach(e => {
+
+            const affectedProducts = e.affect.map(product => {
+                const color = e.increase ? '#ff4444' : e.decrease ? '#009933' : '#000000';
+                return `<span style="color: ${color}">${product}</span>`;
+            }).join(', ');
+
+            currentEvents.innerHTML += `
+            <li>
+                <strong>${e.description}</strong><br>
+                <em>影响商品：${affectedProducts}</em><br>
+                <em>关联新闻：${e.news}</em>
+            </li>
+        `;
+        });
+
+        // 显示最新新闻
+        latestCycle.news.forEach(n => {
+            latestNews.innerHTML += `<li>${n}</li>`;
+        });
+    });
+
+    function getTrend(product, cycles) {
+        const latestCycleIndex = cycles.length - 1;
+        let trend = '';
+
+        for (let m = Math.max(0, latestCycleIndex-2); m <= latestCycleIndex; m++) {
+            cycles[m].events.forEach(event => {
+                if (event.affect.includes(product)) {
+                    const color = event.increase ? '#ff4444' : '#009933';
+                    trend += `<span style="color: ${color}">${event.increase ? '↑' : '↓'}</span>`;
+                }
+            });
+        }
+        return trend || '-';
+    }
+
+    function calcPercentage(current, avg) {
+        if (!current || !avg) return '-';
+        const percent = ((current - avg)/avg * 100).toFixed(2);
+        const color = current > avg ? 'color: #ff4444;' : current < avg ? 'color: #009933;' : "";
+        return `<span style="${color}">${current > avg ? '+' : current < avg ? '-' : ''}${Math.abs(percent)}% </span>`;
+    }
+</script>
+</body>
+</html>
