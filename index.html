@@ -82,7 +82,7 @@
         cycles.forEach((cycle, cycleIdx) => {
             cycle.events.forEach(event => {
                 event.affect.forEach(product => {
-                    for (let i = cycleIdx; i <= Math.min(cycleIdx+2, cycles.length-1); i++) {
+                    for (let i = cycleIdx; i <= Math.min(cycleIdx+1, cycles.length-1); i++) {
                         productData[product].affected[i] = true;
                     }
                 });
