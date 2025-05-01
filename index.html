@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <title>商品价格监控</title>
+    <title>商界双侠   云津市集</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <meta charset="utf-8">
     <style>
@@ -200,7 +200,7 @@
 
         // 收集生效事件
         const activeEvents = [];
-        for (let m = Math.max(0, latestCycleIndex-2); m <= latestCycleIndex; m++) {
+        for (let m = Math.max(0, latestCycleIndex-1); m <= latestCycleIndex; m++) {
             cycles[m].events.forEach((event, i) => {
                 if (m-1 >= 0) { // 关联的新闻周期
                     const news = cycles[m-1].news[i];
@@ -236,7 +236,7 @@
         const latestCycleIndex = cycles.length - 1;
         let trend = '';
 
-        for (let m = Math.max(0, latestCycleIndex-2); m <= latestCycleIndex; m++) {
+        for (let m = Math.max(0, latestCycleIndex-1); m <= latestCycleIndex; m++) {
             cycles[m].events.forEach(event => {
                 if (event.affect.includes(product)) {
                     const color = event.increase ? '#ff4444' : '#009933';
